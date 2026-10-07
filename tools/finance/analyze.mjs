@@ -236,6 +236,12 @@ export function detectRecurring(transactions, asOf, lookbackDays = 550) {
  */
 export function reconstructBalances(transactions, account, asOf, months) {
   const txs = transactions
+    // A reconciliation plug is a feed correcting its own stale balance, not a
+    // movement. Barclays reconnected in Sep 2026 and Simplifi bridged an
+    // $18,765 stale figure to the real $83,765 with one $65,000 row — on top of
+    // the genuine $80,000 transfer it had missed. Counting both rolls the
+    // account back to minus $61,234.
+    .filter((t) => !t.reconcilePlug)
     .filter((t) => t.account === account.name && t.date <= asOf)
     .sort((a, b) => toTime(b.date) - toTime(a.date));
 
@@ -354,7 +360,10 @@ export function netWorthSeries(transactions, config, months, asOf) {
  * every account stays plausible all the way to today, and start there.
  */
 function trustBoundary(months, accounts, perAccount) {
-  const CREDIT_TOLERANCE = 250;    // a card can sit slightly in credit
+  // A card genuinely can sit a few hundred in credit — a refund posting after
+  // the balance was cleared does it. $250 was too tight: it disqualified an
+  // entire year of history over a $255.86 AMEX credit in Apr 2025.
+  const CREDIT_TOLERANCE = 600;
   const ASSET_TOLERANCE = -2500;   // a checking account can be overdrawn
 
   let boundary = 0;
