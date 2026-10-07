@@ -1,0 +1,20 @@
+{
+  "name": "finances",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev --port 4322",
+    "build": "astro build",
+    "preview": "astro preview",
+    "finance": "node tools/build-finance.mjs",
+    "finance:import": "node tools/import-finance.mjs",
+    "finance:check": "node tools/check-finance.mjs",
+    "finance:publish": "node tools/build-finance.mjs && git add public/data.enc.json && (git diff --cached --quiet || git commit -m 'Update finance data') && git push"
+  },
+  "dependencies": {
+    "@fontsource-variable/fraunces": "^5.1.1",
+    "@fontsource-variable/inter": "^5.1.1",
+    "astro": "^5.2.5"
+  }
+}

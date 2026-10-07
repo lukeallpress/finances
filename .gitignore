@@ -1,0 +1,21 @@
+# build output
+dist/
+.astro/
+node_modules/
+
+# ── Everything private ──────────────────────────────────────────────────────
+# Raw exports, balances, mortgage terms, paystubs, tax returns, the cleartext
+# payload, the generated runsheet. None of it is ever committed. The only thing
+# published is public/data.enc.json — one AES-256-GCM blob.
+finance-private/
+
+# NOTE: public/data.enc.json is deliberately NOT ignored. It is tracked, and
+# must stay tracked — gitignoring a tracked file does not untrack it, it just
+# means `git add -A` silently stages its deletion. What stops a weak passphrase
+# reaching the repo is the entropy check in tools/build-finance.mjs.
+
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.claude/settings.local.json
