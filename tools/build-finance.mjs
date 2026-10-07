@@ -522,8 +522,14 @@ payload.refinance = refinance(config, payload);
 
 // ── Encrypt & write ─────────────────────────────────────────────────────────
 
-const passphrase = process.env.FINANCE_PASSPHRASE ?? await prompt();
-const weak = checkPassphrase(passphrase);
+// A dry run recomputes everything and writes the debug payload, but never
+// touches the published blob. It exists because the alternative — building with
+// a throwaway passphrase to inspect the numbers and remembering to restore the
+// real file afterwards — has already published an unopenable dashboard once.
+const DRY_RUN = process.argv.includes('--dry-run');
+
+const passphrase = DRY_RUN ? null : (process.env.FINANCE_PASSPHRASE ?? await prompt());
+const weak = DRY_RUN ? null : checkPassphrase(passphrase);
 if (weak) {
   console.error(`\n  Refusing to encrypt: ${weak}\n`);
   console.error('  The encrypted file goes into a PUBLIC repo. Iteration count slows an');
@@ -548,14 +554,20 @@ function checkPassphrase(p) {
   return null;
 }
 
+if (DRY_RUN) {
+  writeFileSync(path.join(SRC, 'payload.debug.json'), JSON.stringify(payload, null, 2));
+  writeFileSync(path.join(SRC, 'RUNSHEET.md'), buildRunsheet(payload));
+  console.log(`\n  DRY RUN — ${OUT_FILE} untouched. Debug payload and runsheet written.`);
+}
+
 const json = JSON.stringify(payload);
 const gz = gzipSync(Buffer.from(json, 'utf8'), { level: 9 });
-const enc = await encryptPayload(gz, passphrase);
+const enc = DRY_RUN ? null : await encryptPayload(gz, passphrase);
 
 // Decrypt what we just produced, with the passphrase as the shell actually
 // handed it over, before anything is written. If the two disagree the file is
 // unopenable and the only place to find that out is the browser, an hour later.
-const verified = await verifyPayload(enc, passphrase);
+const verified = DRY_RUN ? true : await verifyPayload(enc, passphrase);
 if (!verified) {
   console.error('\n  Encryption verification FAILED — refusing to write the file.');
   console.error('  The blob did not decrypt with the passphrase it was just built from,');
@@ -563,13 +575,15 @@ if (!verified) {
   process.exit(1);
 }
 
-mkdirSync(OUT_DIR, { recursive: true });
-writeFileSync(OUT_FILE, JSON.stringify(enc));
+if (!DRY_RUN) {
+  mkdirSync(OUT_DIR, { recursive: true });
+  writeFileSync(OUT_FILE, JSON.stringify(enc));
+}
 
 // The runsheet is regenerated every build so it cannot drift from the
 // dashboard. It stays in the private directory — it is plain text.
 const runsheetPath = path.join(SRC, 'RUNSHEET.md');
-writeFileSync(runsheetPath, buildRunsheet(payload));
+if (!DRY_RUN) writeFileSync(runsheetPath, buildRunsheet(payload));
 // The cleartext payload is a debugging aid, not an output. It lands in the
 // gitignored private directory and only when explicitly requested.
 if (process.env.FINANCE_DEBUG) {
@@ -592,9 +606,9 @@ console.log(`
   tax gap        $${pay.tax ? Math.round(pay.tax.totalGap).toLocaleString() : 'n/a'}
   json           ${kb(json.length)}
   gzipped        ${kb(gz.length)}
-  encrypted      ${kb(JSON.stringify(enc).length)}   → public/data.enc.json
+  encrypted      ${DRY_RUN ? 'skipped (dry run) — published blob untouched' : `${kb(JSON.stringify(enc).length)}   → public/data.enc.json`}
   runsheet       finance-private/RUNSHEET.md
-  verified       decrypts with the passphrase given (${verified.meta.txCount.toLocaleString()} rows read back)
+  verified       ${DRY_RUN ? 'n/a (dry run)' : `decrypts with the passphrase given (${verified.meta.txCount.toLocaleString()} rows read back)`}
 
   affordability  $${payload.affordability.sustainableIncome.toLocaleString()} in · $${payload.affordability.housingNow.toLocaleString()} housing · $${payload.affordability.baseline.toLocaleString()} everything else
                  operating gap today $${payload.affordability.scenarios[0].surplus.toLocaleString()} · late 2027 $${payload.affordability.scenarios[2].surplus.toLocaleString()}
