@@ -46,7 +46,18 @@ const LINES = [
   { key: 'gas', label: 'Gas', kind: 'utility', match: /southwest gas/i },
   { key: 'water', label: 'Water and sewer', kind: 'utility', match: /valley utilities|liberty utilitie|epcor/i },
   { key: 'trash', label: 'Trash', kind: 'utility', match: /parks and sons/i },
-  { key: 'internet', label: 'Internet', kind: 'utility', match: /centurylink|starlink/i },
+  // Different providers either side of the move, so the windows need different
+  // matchers. CenturyLink kept billing the old house for two cycles after move-in;
+  // counting it as a new-house cost blended $65 + $55 into a $116 "after" figure
+  // for a service that actually costs $55.
+  {
+    key: 'internet', label: 'Internet', kind: 'utility',
+    match: /centurylink|starlink/i,
+    matchBefore: /centurylink/i,
+    matchAfter: /starlink/i,
+    lingered: /centurylink/i,
+    statedAfter: 55,
+  },
   { key: 'pool', label: 'Pool service', kind: 'service', match: /cowabunga/i, statedNew: 'Pool service' },
   { key: 'pest', label: 'Pest control', kind: 'service', match: /deal pest|aptive/i, statedNew: 'Pest control' },
 ];
@@ -85,7 +96,7 @@ export function houseCompare(config, payload, transactions) {
       if (!match.test(t.rawPayee ?? t.payee)) continue;
       hits.push(t);
     }
-    if (!hits.length) return { monthly: 0, charges: 0, gapDays: null };
+    if (!hits.length) return { monthly: 0, charges: 0, gapDays: null, total: 0 };
     hits.sort((a, b) => (a.date < b.date ? -1 : 1));
     const total = hits.reduce((s2, t) => s2 + -t.amount, 0);
 
@@ -95,7 +106,7 @@ export function houseCompare(config, payload, transactions) {
     // cadence from the other side of the move, it is passed in and used.
     if (hits.length === 1) {
       const period = cadenceHint ? cadenceHint / 30.44 : 1;
-      return { monthly: total / Math.max(1, period), charges: 1, gapDays: null, thin: true };
+      return { monthly: total / Math.max(1, period), charges: 1, gapDays: null, thin: true, total };
     }
 
     // Span the billing period the last charge covers, not just to its date —
@@ -106,7 +117,7 @@ export function houseCompare(config, payload, transactions) {
       1,
       ((Date.parse(hits[hits.length - 1].date) - Date.parse(hits[0].date)) / DAY + gapDays) / 30.44,
     );
-    return { monthly: total / spanMonths, charges: hits.length, gapDays, thin: hits.length < 3 };
+    return { monthly: total / spanMonths, charges: hits.length, gapDays, thin: hits.length < 3, total };
   };
 
   const statedPlanned = new Map(
@@ -143,19 +154,27 @@ export function houseCompare(config, payload, transactions) {
       note = 'Included in the old all-in payment above';
     } else if (endedMatchers.some((e) => e.key === line.key)) {
       const e = endedMatchers.find((x) => x.key === line.key);
-      before = round(e.was ?? perMonth(line.match, oldFrom, moveIn).monthly);
+      before = round(e.was ?? perMonth(line.matchBefore ?? line.match, oldFrom, moveIn).monthly);
       after = 0;
       note = 'Paid off in full out of the sale proceeds — gone for good, not paused';
     } else {
-      const b = perMonth(line.match, oldFrom, moveIn);
+      const b = perMonth(line.matchBefore ?? line.match, oldFrom, moveIn);
       before = round(b.monthly);
       const stated = line.statedNew ? statedPlanned.get(line.statedNew) : null;
       if (stated != null) {
         after = round(stated);
         estimate = true;
         note = 'Stated ongoing rate — the ledger has only partial charges since the move';
+      } else if (line.statedAfter != null) {
+        // A flat monthly rate the ledger cannot measure cleanly yet: the window
+        // since the move is short and opens with a prorated first bill, which
+        // drags the average above the rate actually being charged.
+        after = round(line.statedAfter);
+        estimate = true;
+        note = 'Flat monthly rate. The measured window is too short to show it — '
+          + 'it opens with a prorated first bill.';
       } else {
-        const a = perMonth(line.match, moveIn, asOf, b.gapDays);
+        const a = perMonth(line.matchAfter ?? line.match, moveIn, asOf, b.gapDays);
         after = round(a.monthly);
         if (a.thin) {
           thin = true;
@@ -174,6 +193,18 @@ export function houseCompare(config, payload, transactions) {
       thin,
       note,
     };
+
+    if (line.lingered) {
+      const l = perMonth(line.lingered, moveIn, asOf);
+      if (l.charges > 0) {
+        row.lingeredTotal = round(l.total);
+        row.lingeredCharges = l.charges;
+        row.note = `${row.note ? `${row.note} ` : ''}The old provider billed `
+          + `${l.charges} more time${l.charges === 1 ? '' : 's'} after the move — `
+          + `$${round(l.total).toLocaleString()} of overlap. That is a one-off, not the `
+          + 'ongoing rate, so it is excluded here.';
+      }
+    }
 
     if (line.seasonal && after > before && newMonths < 4) {
       row.annualised = round(after / SUMMER_PEAK_FACTOR);
