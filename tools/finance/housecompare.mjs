@@ -44,7 +44,21 @@ const LINES = [
     seasonal: true, pairedWith: 'solar',
   },
   { key: 'gas', label: 'Gas', kind: 'utility', match: /southwest gas/i },
-  { key: 'water', label: 'Water and sewer', kind: 'utility', match: /valley utilities|liberty utilitie|epcor/i },
+  // Liberty serves both addresses, so payee alone cannot tell the two accounts
+  // apart: the old house's is a flat $45.38 that has not moved since 2018, the
+  // new one is metered. Valley Utilities is unambiguously the old house and was
+  // still billing a month after the sale. The new figure is taken from the first
+  // Redondo bill until the Oct 19 draft lands and gives the ledger something to
+  // measure.
+  {
+    key: 'water', label: 'Water and sewer', kind: 'utility',
+    match: /valley utilities|liberty utilitie|epcor/i,
+    matchBefore: /valley utilities|liberty utilitie|epcor/i,
+    statedAfter: 143,
+    statedNote: 'Taken from the first Redondo bill — $143.30, 20,126 gallons, drafting '
+      + '19 Oct 2026. The ledger has no new-house water charge yet.',
+    lingered: /valley utilities/i,
+  },
   { key: 'trash', label: 'Trash', kind: 'utility', match: /parks and sons/i },
   // Different providers either side of the move, so the windows need different
   // matchers. CenturyLink kept billing the old house for two cycles after move-in;
@@ -171,8 +185,8 @@ export function houseCompare(config, payload, transactions) {
         // drags the average above the rate actually being charged.
         after = round(line.statedAfter);
         estimate = true;
-        note = 'Flat monthly rate. The measured window is too short to show it — '
-          + 'it opens with a prorated first bill.';
+        note = line.statedNote ?? 'Flat monthly rate. The measured window is too short '
+          + 'to show it — it opens with a prorated first bill.';
       } else {
         const a = perMonth(line.matchAfter ?? line.match, moveIn, asOf, b.gapDays);
         after = round(a.monthly);
