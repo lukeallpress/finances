@@ -55,9 +55,11 @@ const LINES = [
     match: /valley utilities|liberty utilitie|epcor/i,
     matchBefore: /valley utilities|liberty utilitie|epcor/i,
     statedAfter: 143,
-    statedNote: 'Taken from the first Redondo bill — $143.30, 20,126 gallons, drafting '
-      + '19 Oct 2026. The ledger has no new-house water charge yet.',
-    lingered: /valley utilities/i,
+    statedNote: 'Ongoing water and sewer from the Redondo bills — $143.30 in October. '
+      + 'The one payment in the ledger so far, $166.51, carried $120 of one-off setup, '
+      + 'so measuring it would overstate the rate.',
+    matchAfter: /ez-pay|lu az/i,
+    lingered: /valley utilities|liberty utilitie/i,
   },
   { key: 'trash', label: 'Trash', kind: 'utility', match: /parks and sons/i },
   // Different providers either side of the move, so the windows need different
