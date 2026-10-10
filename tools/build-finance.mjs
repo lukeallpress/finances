@@ -339,8 +339,14 @@ if (pay.tax && Math.abs(pay.tax.totalGap) > 1500) {
     detail: 'Olivia\'s receipt withholds no federal tax at all — state and FICA only — so the '
       + `household\'s entire federal withholding is Luke\'s $${Math.round(pay.tax.federalWithheld).toLocaleString()} a year. `
       + `Against roughly $${Math.round(pay.tax.federalOnWages).toLocaleString()} of projected federal tax on wages `
-      + `(after an assumed ${pay.tax.assumptions.dependentChildren}-child credit), plus about `
-      + `$${Math.round(pay.tax.federalOnGains).toLocaleString()} on the assumed gain from the July Wealthfront sale. `
+      + `(after an assumed ${pay.tax.assumptions.dependentChildren}-child credit)`
+      // The estimator-sourced figures carry no separate capital-gains line — its
+      // total already includes the July sale — so this clause only applies when
+      // the gain is modelled here instead.
+      + (Number.isFinite(pay.tax.federalOnGains) && pay.tax.federalOnGains > 0
+        ? `, plus about $${Math.round(pay.tax.federalOnGains).toLocaleString()} on the assumed `
+          + 'gain from the July Wealthfront sale. '
+        : '. ')
       + 'Every input is an assumption and shown on the Paycheck page — this is arithmetic, not '
       + 'tax advice. Worth putting in front of whoever files the return.',
   });
